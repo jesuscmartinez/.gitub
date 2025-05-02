@@ -1,0 +1,99 @@
+name: Lets Threat Model
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: "Path to the config.yml file"
+        required: true
+        default: "lets-threat-model.yml"
+      markdown_output:
+        description: "Path to the Markdown report"
+        required: false
+        default: "threat_model_report.md"
+      json_output:
+        description: "Path to the JSON report"
+        required: false
+        default: "threat_model_report.json"
+      sarif_output:
+        description: "Path to the SARIF report"
+        required: false
+        default: "threat_model_report.sarif"
+      upload_artifacts:
+        description: "Upload reports as artifacts"
+        required: false
+        default: "true"
+      upload_to_code_scanning:
+        description: "Upload SARIF report to GitHub code scanning"
+        required: false
+        default: "false"
+    
+jobs:
+    generate-threat-model:
+        runs-on: ubuntu-latest
+
+        env:
+          MARKDOWN_OUTPUT: ${{ github.event.inputs.markdown_output }}
+          JSON_OUTPUT: ${{ github.event.inputs.json_output }}
+          SARIF_OUTPUT: ${{ github.event.inputs.sarif_output }}
+        
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: Generate Threat Model
+              uses: jesuscmartinez/lets-threat-model-github-action@v1.0.2
+              with:
+                config: ${{ github.event.inputs.config }}
+                openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+                anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+                markdown-output: ${{ env.MARKDOWN_OUTPUT }}
+                json-output: ${{ env.JSON_OUTPUT }}
+                sarif-output: ${{ env.SARIF_OUTPUT }}
+                
+            - name: Verify the generated Markdown report exists
+              run: |
+                    if [ -f "${{ env.MARKDOWN_OUTPUT }}" ]; then
+                    echo "✅ Markdown report generated."
+                    else
+                    echo "❌ Markdown report not found!"
+                    exit 1
+                    fi
+
+            - name: Verify the generated JSON report exists
+              run: |
+                if [ -f "${{ env.JSON_OUTPUT }}" ]; then
+                echo "✅ JSON report generated."
+                else
+                echo "❌ JSON report not found!"
+                exit 1
+                fi
+            - name: Verify the generated SARIF report exists
+              run: |
+                if [ -f "${{ env.SARIF_OUTPUT }}" ]; then
+                echo "✅ SARIF report generated."
+                else
+                echo "❌ SARIF report not found!"
+                exit 1
+                fi
+
+            - name: Upload reports as artifacts (Optional)
+              if: ${{ github.event.inputs.upload_artifacts == 'true' }}
+              uses: actions/upload-artifact@v4
+              with:
+                name: threat-model-reports
+                path: |
+                  ${{ env.MARKDOWN_OUTPUT }}
+                  ${{ env.JSON_OUTPUT }}
+                  ${{ env.SARIF_OUTPUT }}
+                  
+            - name: Upload SARIF file to GitHub Code Scanning
+              if: ${{ github.event.inputs.upload_to_code_scanning == 'true' }}
+              uses: github/codeql-action/upload-sarif@v3
+              with:
+                sarif_file: ${{ env.SARIF_OUTPUT }}
